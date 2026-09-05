@@ -10,7 +10,9 @@ socket, same as any other mpv instance.
 
 ## Demo
 
-<video src="https://github.com/krakerz/linux-emby-svp/raw/dev/linux-emby-svp-demo.mp4" controls width="600"></video>
+[▶ Watch demo](linux-emby-svp-demo.mp4) — GitHub's README renderer strips
+raw `<video>` tags (only works for its own attachment-upload embeds, not a
+self-hosted repo file), so click through to GitHub's file viewer instead.
 
 ## Prerequisites
 
@@ -104,3 +106,7 @@ restoring a stale one.
 | `kwin-embed-emby/` | KWin script: cosmetic embedding (Plasma 6 only). |
 | `install-kwin-embed.sh` / `uninstall-kwin-embed.sh` | Install/remove it. |
 | `install.sh` / `uninstall.sh` | Runs everything above in order. |
+
+## License
+
+MIT — see [LICENSE](LICENSE).
