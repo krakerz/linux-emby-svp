@@ -8,6 +8,10 @@ Works by swapping Emby's bundled `libmpv.so` for SVP's VapourSynth-enabled
 mpv build, and getting SVP Manager to attach to it over its usual JSON IPC
 socket, same as any other mpv instance.
 
+## Demo
+
+<video src="linux-emby-svp-demo.mp4" controls width="600"></video>
+
 ## Prerequisites
 
 - **SVP4** installed and working (reuses its `mpv/` and `python/` dirs).
@@ -37,41 +41,6 @@ Just re-run `sh install.sh` — every step is checksum/content-based and safe
 to re-run any time; it refreshes backups from the new original instead of
 restoring a stale one.
 
-## Known limitations
-
-- **No true window embedding.** Emby embeds mpv via X11 `wid`; only Vulkan
-  **Wayland** renders video reliably here, and Wayland has no foreign-window
-  embedding. (Vulkan X11 also tried — fails with `VK_ERROR_INITIALIZATION_FAILED`
-  / X11 `BadLength` creating the swapchain against Emby's embed window; not
-  fixable from here.)
-
-  `kwin-embed-emby/` (KDE Plasma 6 only, installed by `install.sh`) makes it
-  *look* embedded instead:
-  - No decorations, stacked below Emby's main window.
-  - Height-locked fit to Emby's client area: scale so video height == Emby's
-    window height (preserves aspect ratio); if scaled width overflows,
-    window stays that wide, cropping left/right; if narrower, window stays
-    at Emby's full width instead of shrinking, so mpv's own default
-    letterboxing fills the sides in black rather than exposing desktop.
-    Applied on window creation, then reactively whenever mpv's own geometry
-    changes again — but only for the first 10s after the window appears,
-    then it stops watching entirely until the next mpv window (SVP's
-    filter engaging causes exactly one, content-driven resize a few seconds
-    in, even with `keepaspect-window=no` and a cleared `geometry` option —
-    see below; reacting indefinitely isn't needed and risks fighting any
-    later legitimate resize). A no-op check when geometry already matches
-    stops this from retriggering itself. Unbounded live reacting was unsafe
-    in an earlier version — `keepaspect-window` and a re-applied `geometry`
-    option fought back in a tight loop; both are fixed at the source now.
-    A KWin *Effect*-based paint-transform approach was also tried — caused
-    playback to hang; abandoned.
-  - Emby's main window closes/reopens unreliably around fullscreen/playback
-    transitions, so its reference is never cached — looked up fresh via
-    `workspace.windowList()` every time it's needed instead.
-
-  Other DEs: video just plays in a plain floating window.
-- Only tested at 23.976fps -> 119.88fps (SVP `x5` "Automatic"), H.265.
-
 ## How it works
 
 - Video isn't HTML5 — `Emby.MpvPlayer.dll` P/Invokes `libmpv.so` directly.
@@ -79,28 +48,47 @@ restoring a stale one.
   Emby integration.
 - SVP4 already ships a compatible `libmpv.so.2` — no build-from-source needed.
 - Emby doesn't read mpv.conf, and spawns short-lived "probe" mpv instances
-  too, so IPC can't be forced on unconditionally at init. `shim.c` intercepts
+  too, so IPC can't be forced unconditionally at init. `shim.c` intercepts
   `dlsym()` (bypasses .NET's P/Invoke symbol resolution) and forces IPC only
   once it sees the real `loadfile` command.
 - Embedded Python (for VapourSynth) needs its stdlib/C-extension symbols
   visible inside Emby's process — see `patch-libmpv.sh`/`patch-wrapper.sh`
   comments (`._pth` sidecar, `libpython` needs `LD_PRELOAD` not `dlopen`).
-- `shim.c` forces mpv options pre/post-init:
-  - `keepaspect-window=no` — stops mpv self-resizing its window to match
-    video aspect when SVP's filter engages (fights any external geometry
-    control otherwise).
-  - `border=no` — mpv defaults to requesting its own server-side
-    decoration since it's never truly embedded; briefly granted before our
-    script's `noBorder` strips it, causing a transient black bar. (A first
-    theory blamed mpv's built-in OSC reserving margin — wrong, this mpv
-    build has Lua disabled entirely so OSC can't run at all.)
-  - `geometry=100%x100%` — mpv defaults its window to the video's native
-    resolution (e.g. 1920x1080 for a 1080p file), not the display, so it
-    opens small before the KWin script resizes it. This opens it at full
-    screen size immediately instead. mpv re-evaluates `geometry` on every
-    reconfigure though, not just the first, so it gets cleared again right
-    after `loadfile` (initial size already applied by then, well before
-    SVP ever attaches) so it can't fight the KWin script on a later one.
+- `shim.c` also forces `keepaspect-window=no` (stops mpv self-resizing on
+  SVP's filter engaging), `border=no` (stops mpv requesting its own
+  decoration, which briefly appears before the KWin script's `noBorder`
+  strips it — not, as first suspected, mpv's OSC, which can't even run
+  since this build has Lua disabled), and a `geometry=100%x100%` +
+  post-`loadfile` clear (opens at full screen size instead of native video
+  resolution, without leaving that option to fight later reconfigures).
+
+## Known limitations
+
+- **No true window embedding.** Emby embeds mpv via X11 `wid`; only Vulkan
+  Wayland renders video reliably here, and Wayland has no foreign-window
+  embedding (Vulkan X11 also tried — fails creating the swapchain against
+  Emby's embed window; not fixable from here).
+
+  `kwin-embed-emby/` (KDE Plasma 6 only) makes it *look* embedded: no
+  decorations, height-locked fit to Emby's window (preserves video aspect,
+  crops overflow instead of letterboxing, applied on window creation and
+  reactively for the first 10s), and mpv kept always below Emby's own
+  window. Other DEs: video just plays in a plain floating window.
+- **Video can render above other unrelated windows** (terminal, file
+  manager, etc.) if they're not minimized. Tried making both Emby and mpv
+  "always on top" with Emby explicitly raised above mpv — verified via
+  logging that this was applied correctly on KWin's side, but had no visible
+  effect at all. Suspected cause: mpv's Vulkan-Wayland surface may be shown
+  via direct scanout (a hardware display plane bypassing normal compositor
+  stacking), which would make this uncontrollable from a KWin script
+  regardless. Not confirmed; not pursued further (would require restarting
+  KWin with `KWIN_DRM_NO_DIRECT_SCANOUT=1` to test).
+- Only tested at 23.976fps -> 119.88fps (SVP `x5` "Automatic"), H.265.
+
+## Notes
+
+- Tested on KDE Plasma / KWin 6.7.4 (Wayland), CachyOS (kernel 7.2.3).
+- Tested against Emby Linux beta client 2.319.0–2.321.0.
 - A client-side or server-side Emby plugin for a "readjust" button was
   considered, not pursued — no plugin/UI-extension API on the client, and a
   server-side plugin has no channel to this machine's window manager at all.

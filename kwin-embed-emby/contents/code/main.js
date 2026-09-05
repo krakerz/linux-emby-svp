@@ -31,6 +31,12 @@ function matches(win, cls) {
     return win.resourceClass === cls || win.resourceName === cls;
 }
 
+// win.caption for an mpv window is the full media URL, including a real
+// Emby api_key and device/session IDs -- never log it as-is.
+function redactedCaption(win) {
+    return String(win.caption).split("?")[0];
+}
+
 function currentOverlay() {
     return workspace.windowList().find(function (w) {
         return matches(w, OVERLAY_CLASS);
@@ -93,7 +99,7 @@ function setupMpvWindow(win) {
     stopTimer.singleShot = true;
     stopTimer.timeout.connect(function () {
         reactive = false;
-        log("reactive window closed (" + win.caption + ") -- standing by for next mpv window");
+        log("reactive window closed (" + redactedCaption(win) + ") -- standing by for next mpv window");
     });
     stopTimer.start();
 
