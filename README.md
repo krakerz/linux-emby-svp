@@ -53,12 +53,18 @@ restoring a stale one.
     window stays that wide, cropping left/right; if narrower, window stays
     at Emby's full width instead of shrinking, so mpv's own default
     letterboxing fills the sides in black rather than exposing desktop.
-    Applied once on window creation, once more at +6s (SVP's filter regrows
-    the window a few seconds in, even with `keepaspect-window=no` set —
-    see below).
-  - Not continuous/live — live geometry-matching fights mpv's own resizing
-    forever (tried, broke scaling). A KWin *Effect*-based paint-transform
-    approach was also tried — caused playback to hang; abandoned.
+    Applied on window creation, then reactively whenever mpv's own geometry
+    changes again — but only for the first 10s after the window appears,
+    then it stops watching entirely until the next mpv window (SVP's
+    filter engaging causes exactly one, content-driven resize a few seconds
+    in, even with `keepaspect-window=no` and a cleared `geometry` option —
+    see below; reacting indefinitely isn't needed and risks fighting any
+    later legitimate resize). A no-op check when geometry already matches
+    stops this from retriggering itself. Unbounded live reacting was unsafe
+    in an earlier version — `keepaspect-window` and a re-applied `geometry`
+    option fought back in a tight loop; both are fixed at the source now.
+    A KWin *Effect*-based paint-transform approach was also tried — caused
+    playback to hang; abandoned.
   - Emby's main window closes/reopens unreliably around fullscreen/playback
     transitions, so its reference is never cached — looked up fresh via
     `workspace.windowList()` every time it's needed instead.
@@ -91,7 +97,10 @@ restoring a stale one.
   - `geometry=100%x100%` — mpv defaults its window to the video's native
     resolution (e.g. 1920x1080 for a 1080p file), not the display, so it
     opens small before the KWin script resizes it. This opens it at full
-    screen size immediately instead.
+    screen size immediately instead. mpv re-evaluates `geometry` on every
+    reconfigure though, not just the first, so it gets cleared again right
+    after `loadfile` (initial size already applied by then, well before
+    SVP ever attaches) so it can't fight the KWin script on a later one.
 - A client-side or server-side Emby plugin for a "readjust" button was
   considered, not pursued — no plugin/UI-extension API on the client, and a
   server-side plugin has no channel to this machine's window manager at all.
