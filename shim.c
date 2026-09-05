@@ -79,6 +79,16 @@ static int my_mpv_initialize(void *ctx) {
         logmsg("forced border=no pre-init to stop mpv requesting its own server-side decoration");
         if (rc < 0)
             logmsg("WARNING: mpv_set_option_string(border) returned an error");
+
+        /* mpv defaults its window to the video's native resolution (e.g.
+         * 1920x1080 for a 1080p file) regardless of the actual display, so
+         * it opens small then needs the KWin script to resize it.
+         * geometry accepts percentages relative to the screen -- 100%x100%
+         * opens it already at full-screen size, before it's ever mapped. */
+        rc = real_mpv_set_option_string(ctx, "geometry", "100%x100%");
+        logmsg("forced geometry=100%x100% so mpv opens at full screen size, not native video size");
+        if (rc < 0)
+            logmsg("WARNING: mpv_set_option_string(geometry) returned an error");
     } else {
         logmsg("WARNING: could not resolve real mpv_set_option_string");
     }
