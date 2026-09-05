@@ -116,6 +116,20 @@ static int my_mpv_command(void *ctx, const char **args) {
              * fighting the KWin script's own geometry control. */
             real_mpv_set_property_string(ctx, "keepaspect-window", "no");
             logmsg("disabled keepaspect-window to stop mpv fighting external window resizes");
+
+            /* geometry=100%x100% (set pre-init, see my_mpv_initialize) did
+             * its one job of opening the window at full size instead of
+             * native video resolution. But mpv re-evaluates geometry on
+             * every reconfigure, not just the first -- and SVP's filter
+             * attaching later triggers exactly that, snapping the window
+             * back to it and fighting the KWin script's own fit. Clear it
+             * now, after the initial size is already set and before SVP
+             * ever attaches, so nothing's left for a later reconfigure to
+             * re-apply. */
+            if (real_mpv_set_option_string) {
+                real_mpv_set_option_string(ctx, "geometry", "");
+                logmsg("cleared geometry after initial sizing so it can't be reapplied on later reconfigures");
+            }
         } else {
             logmsg("WARNING: could not resolve real mpv_set_property_string");
         }
