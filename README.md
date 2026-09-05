@@ -10,8 +10,7 @@ socket, same as any other mpv instance.
 
 ## Demo
 
-[▶ Watch demo](linux-emby-svp-demo.mp4) (repo is private — a `<video>` embed
-doesn't render here; click through to GitHub's own file viewer instead)
+<video src="https://github.com/krakerz/linux-emby-svp/raw/dev/linux-emby-svp-demo.mp4" controls width="600"></video>
 
 ## Prerequisites
 
