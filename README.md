@@ -51,14 +51,14 @@ restoring a stale one.
   - Height-locked, center-crop fit to Emby's client area: scale so video
     height == Emby's window height (preserves aspect ratio), crop
     left/right overflow instead of letterboxing. Applied once on window
-    creation, once more at +10s (SVP's filter regrows the window a few
+    creation, once more at +6s (SVP's filter regrows the window a few
     seconds in, even with `keepaspect-window=no` set — see below).
   - Not continuous/live — live geometry-matching fights mpv's own resizing
     forever (tried, broke scaling). A KWin *Effect*-based paint-transform
     approach was also tried — caused playback to hang; abandoned.
-  - Re-scans for Emby's main window if it unexpectedly closes/reopens
-    (observed around fullscreen transitions) instead of waiting on an add
-    event that may never fire.
+  - Emby's main window closes/reopens unreliably around fullscreen/playback
+    transitions, so its reference is never cached — looked up fresh via
+    `workspace.windowList()` every time it's needed instead.
 
   Other DEs: video just plays in a plain floating window.
 - Only tested at 23.976fps -> 119.88fps (SVP `x5` "Automatic"), H.265.
