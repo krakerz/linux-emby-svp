@@ -1,0 +1,12 @@
+{
+    "KPackageStructure": "KWin/Script",
+    "KPlugin": {
+        "Id": "embymvpembed",
+        "Name": "Emby mpv Embed",
+        "Description": "Visually embeds Emby's floating mpv video window under Emby's own control UI, tracking its video-placeholder window's geometry live.",
+        "Icon": "video-x-generic",
+        "Version": "1.0",
+        "License": "MIT"
+    },
+    "X-Plasma-API": "javascript"
+}
