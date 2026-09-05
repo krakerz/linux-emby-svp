@@ -1,29 +1,9 @@
-// Keeps Emby's floating "mpv" playback window borderless and stacked below
-// Emby's own main window ("media.emby.client.beta"), and fits it to Emby's
-// available client area (excluding Emby's own titlebar/borders) using a
-// height-locked, center-crop fit:
-//
-//   scale = target.height / mpv.height   (uniform, preserves mpv's own
-//                                          current aspect ratio)
-//   new width = mpv.width * scale, new height = target.height
-//   horizontally centered over target -- if the scaled width is wider than
-//   target's width, the overflow extends equally past target's left/right
-//   edges (cropped from the viewer's perspective) rather than leaving a
-//   gap or letterboxing top/bottom.
-//
-// Locking to height rather than stretching to Emby's exact box avoids
-// mismatching mpv's own aspect ratio, which is what caused visible black
-// bars in an earlier version that just set frameGeometry = target as-is.
-//
-// Applied once when the mpv window appears, then once more after a fixed
-// ~10s delay: SVP's VapourSynth filter engaging a few seconds into
-// playback changes mpv's own natural window size again (observed even with
-// shim.c's keepaspect-window=no already disabled), so the fit is redone
-// once, reading mpv's now-current size/aspect. Deliberately not applied
-// continuously/live -- continuously re-matching geometry on every change
-// fought mpv's own internal resizing forever in an earlier version, and
-// visibly broke video scaling. Two fixed applications (now, and once more
-// at +10s) handles the SVP-regrowth case without that fight.
+// Borderless, stacked below Emby's main window, height-locked center-crop
+// fit to Emby's client area (preserves video aspect, crops overflow instead
+// of letterboxing). Applied on window creation + once more at +10s (SVP's
+// filter regrows mpv's window a few seconds in even with
+// shim.c's keepaspect-window=no). Not continuous/live -- that fights mpv's
+// own resizing forever and breaks scaling (tried, reverted).
 
 const MPV_CLASS = "mpv";
 const OVERLAY_CLASS = "media.emby.client.beta";
@@ -42,6 +22,8 @@ function matches(win, cls) {
 
 function applyHeightFit(win) {
     if (!overlay) return;
+    // clientGeometry is read-only here (throws on assign); frameGeometry
+    // is the settable one.
     const real = win.frameGeometry;
     const target = overlay.clientGeometry;
     if (!real.width || !real.height || !target.width || !target.height) return;
@@ -65,7 +47,7 @@ function scheduleRegrowFix(win) {
     timer.interval = REGROW_DELAY_MS;
     timer.singleShot = true;
     timer.timeout.connect(function () {
-        if (!mpvWindows.has(win)) return; // window already closed
+        if (!mpvWindows.has(win)) return; // already closed
         log("10s readjust (" + win.caption + ")");
         applyHeightFit(win);
     });
@@ -73,7 +55,7 @@ function scheduleRegrowFix(win) {
 }
 
 function setupMpvWindow(win) {
-    log("mpv window found, applying embed styling");
+    log("mpv window found");
     win.noBorder = true;
     win.skipTaskbar = true;
     win.skipPager = true;
@@ -87,9 +69,13 @@ function setupMpvWindow(win) {
 function setupOverlay(win) {
     log("overlay window found");
     overlay = win;
-    mpvWindows.forEach(function (w) {
-        w.keepBelow = true;
-    });
+    mpvWindows.forEach(function (w) { w.keepBelow = true; });
+}
+
+function findOverlayCandidate() {
+    return workspace.windowList().find(function (w) {
+        return matches(w, OVERLAY_CLASS);
+    }) || null;
 }
 
 function handleWindow(win) {
@@ -109,6 +95,12 @@ workspace.windowRemoved.connect(function (win) {
     if (win === overlay) {
         overlay = null;
         log("overlay window closed");
+        // Emby sometimes closes/recreates its main window (e.g. around a
+        // fullscreen transition) without windowAdded firing for the
+        // replacement -- re-scan now instead of waiting on an add event
+        // that may never come.
+        const candidate = findOverlayCandidate();
+        if (candidate) setupOverlay(candidate);
     }
 });
 
