@@ -40,7 +40,13 @@ function applyHeightFit(win) {
     if (!real.width || !real.height || !target.width || !target.height) return;
 
     const scale = target.height / real.height;
-    const newWidth = real.width * scale;
+    // Never narrower than target: if the scaled video is narrower than
+    // Emby's window, keep the mpv window at full target width anyway --
+    // mpv's own default letterboxing (keepaspect=yes) then pillarboxes the
+    // video in black within that window, instead of the window itself
+    // being narrower and exposing real desktop in the gap on each side.
+    // Only actually wider-than-target (cover/crop) shrinks back to scale.
+    const newWidth = Math.max(real.width * scale, target.width);
     const newHeight = target.height;
     const newX = target.x + (target.width - newWidth) / 2;
     const newY = target.y;

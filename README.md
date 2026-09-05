@@ -48,11 +48,14 @@ restoring a stale one.
   `kwin-embed-emby/` (KDE Plasma 6 only, installed by `install.sh`) makes it
   *look* embedded instead:
   - No decorations, stacked below Emby's main window.
-  - Height-locked, center-crop fit to Emby's client area: scale so video
-    height == Emby's window height (preserves aspect ratio), crop
-    left/right overflow instead of letterboxing. Applied once on window
-    creation, once more at +6s (SVP's filter regrows the window a few
-    seconds in, even with `keepaspect-window=no` set — see below).
+  - Height-locked fit to Emby's client area: scale so video height == Emby's
+    window height (preserves aspect ratio); if scaled width overflows,
+    window stays that wide, cropping left/right; if narrower, window stays
+    at Emby's full width instead of shrinking, so mpv's own default
+    letterboxing fills the sides in black rather than exposing desktop.
+    Applied once on window creation, once more at +6s (SVP's filter regrows
+    the window a few seconds in, even with `keepaspect-window=no` set —
+    see below).
   - Not continuous/live — live geometry-matching fights mpv's own resizing
     forever (tried, broke scaling). A KWin *Effect*-based paint-transform
     approach was also tried — caused playback to hang; abandoned.
@@ -76,7 +79,7 @@ restoring a stale one.
 - Embedded Python (for VapourSynth) needs its stdlib/C-extension symbols
   visible inside Emby's process — see `patch-libmpv.sh`/`patch-wrapper.sh`
   comments (`._pth` sidecar, `libpython` needs `LD_PRELOAD` not `dlopen`).
-- `shim.c` forces two mpv options pre/post-init:
+- `shim.c` forces mpv options pre/post-init:
   - `keepaspect-window=no` — stops mpv self-resizing its window to match
     video aspect when SVP's filter engages (fights any external geometry
     control otherwise).
@@ -85,6 +88,10 @@ restoring a stale one.
     script's `noBorder` strips it, causing a transient black bar. (A first
     theory blamed mpv's built-in OSC reserving margin — wrong, this mpv
     build has Lua disabled entirely so OSC can't run at all.)
+  - `geometry=100%x100%` — mpv defaults its window to the video's native
+    resolution (e.g. 1920x1080 for a 1080p file), not the display, so it
+    opens small before the KWin script resizes it. This opens it at full
+    screen size immediately instead.
 - A client-side or server-side Emby plugin for a "readjust" button was
   considered, not pursued — no plugin/UI-extension API on the client, and a
   server-side plugin has no channel to this machine's window manager at all.
