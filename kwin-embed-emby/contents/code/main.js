@@ -1,16 +1,21 @@
 // Borderless, stacked below Emby's main window, height-locked center-crop
 // fit to Emby's client area (preserves video aspect, crops overflow instead
-// of letterboxing). Applied on window creation, then reactively whenever
-// mpv's own geometry changes again (SVP's filter engaging triggers exactly
-// one, content-driven resize a few seconds in) -- but only for the first
-// REACTIVE_WINDOW_MS after the window appears; after that it stops
-// reacting entirely and stands by until the next mpv window. Live reacting
-// forever was unsafe in an earlier version (fought mpv's own resizing in a
-// tight loop) -- that was specifically keepaspect-window and a re-applied
-// geometry option fighting back; both are now disabled in shim.c, and
-// applyHeightFit no-ops if the geometry already matches what it would set,
-// so this can't retrigger itself either way. The time bound is just to
-// stop watching once SVP's one-time resize window has clearly passed.
+// of letterboxing). Applied on window creation, then reactively for the
+// window's entire lifetime whenever mpv's own geometry changes again (SVP's
+// filter engaging triggers a content-driven resize a few seconds in).
+//
+// This used to only react for the first 10s after the window appeared, then
+// stop -- assuming SVP only ever resizes once, early. Wrong: Emby reuses the
+// same mpv window across an auto-advance to the next episode (no fresh
+// windowAdded fires), so after watching a full episode the 10s window was
+// long expired by the time SVP resized it again for episode 2, and nothing
+// caught it. Reacting for the window's whole lifetime instead, guarded by
+// two safety nets: applyHeightFit no-ops if the geometry already matches
+// what it would set (so our own write doesn't retrigger itself), and a hard
+// rate limit disables reacting entirely if that ever fails and it starts
+// correcting rapidly anyway. Live reacting fought mpv in a tight loop in an
+// earlier version -- that was specifically keepaspect-window and a
+// re-applied geometry option fighting back, both now disabled in shim.c.
 //
 // Emby's main window closes/reopens around fullscreen/playback transitions
 // unreliably (observed multiple times), so we don't cache a reference to it
@@ -19,7 +24,8 @@
 
 const MPV_CLASS = "mpv";
 const OVERLAY_CLASS = "media.emby.client.beta";
-const REACTIVE_WINDOW_MS = 10000;
+const MAX_CORRECTIONS_PER_SECOND = 5;
+const POLL_INTERVAL_MS = 1000;
 
 const mpvWindows = new Set();
 
@@ -64,11 +70,17 @@ function applyHeightFit(win) {
     const newX = target.x + (target.width - newWidth) / 2;
     const newY = target.y;
 
-    // Already correct -- skip the assignment. Without this, setting
-    // frameGeometry below would fire frameGeometryChanged again, which
-    // would call back into this function forever.
-    if (Math.round(real.x) === Math.round(newX) && Math.round(real.y) === Math.round(newY) &&
-        Math.round(real.width) === Math.round(newWidth) && Math.round(real.height) === Math.round(newHeight)) {
+    // Already correct (within a couple pixels) -- skip the assignment.
+    // Without this, setting frameGeometry below would fire
+    // frameGeometryChanged again, which would call back into this function
+    // forever. An exact-match comparison isn't enough: what we request and
+    // what the compositor reports back can differ by a pixel or two of
+    // rounding even when nothing meaningful changed, which an exact
+    // comparison treats as still-different and reapplies forever -- this
+    // is exactly what tripped the rate-limit safety net below in practice.
+    const EPS = 2;
+    if (Math.abs(real.x - newX) <= EPS && Math.abs(real.y - newY) <= EPS &&
+        Math.abs(real.width - newWidth) <= EPS && Math.abs(real.height - newHeight) <= EPS) {
         return;
     }
 
@@ -89,19 +101,49 @@ function setupMpvWindow(win) {
     win.keepBelow = true; // doesn't need an overlay reference to make sense
     applyHeightFit(win);
 
+    // Hard safety net: if applyHeightFit's own no-op check ever fails to
+    // stop a feedback loop for some reason, disable reacting rather than
+    // spinning, instead of relying on that check being the only thing
+    // standing between this and a genuine infinite loop.
     let reactive = true;
+    let corrections = 0;
+    let windowStart = Date.now();
     win.frameGeometryChanged.connect(function () {
-        if (reactive) applyHeightFit(win);
+        if (!reactive) return;
+        const now = Date.now();
+        if (now - windowStart > 1000) {
+            windowStart = now;
+            corrections = 0;
+        }
+        corrections++;
+        if (corrections > MAX_CORRECTIONS_PER_SECOND) {
+            reactive = false;
+            log("WARNING: " + corrections + " corrections within 1s on " +
+                redactedCaption(win) + " -- disabling reactive fit for safety");
+            return;
+        }
+        applyHeightFit(win);
     });
 
-    const stopTimer = new QTimer();
-    stopTimer.interval = REACTIVE_WINDOW_MS;
-    stopTimer.singleShot = true;
-    stopTimer.timeout.connect(function () {
-        reactive = false;
-        log("reactive window closed (" + redactedCaption(win) + ") -- standing by for next mpv window");
+    // Belt and suspenders on top of the reactive listener above: at least
+    // once, our own frameGeometry assignment held for a moment and then
+    // silently reverted seconds later with no further frameGeometryChanged
+    // firing in between -- something (most likely mpv's own buffer commit
+    // after SVP's reconfigure) can apparently win the geometry negotiation
+    // after the fact without a signal we catch. A steady poll guarantees
+    // any drift gets caught within POLL_INTERVAL_MS regardless of whether
+    // the event fires. Safe/cheap: the no-op check above makes every tick
+    // where nothing's wrong a no-op.
+    const pollTimer = new QTimer();
+    pollTimer.interval = POLL_INTERVAL_MS;
+    pollTimer.timeout.connect(function () {
+        if (!mpvWindows.has(win)) {
+            pollTimer.stop();
+            return;
+        }
+        if (reactive) applyHeightFit(win);
     });
-    stopTimer.start();
+    pollTimer.start();
 
     mpvWindows.add(win);
 }
