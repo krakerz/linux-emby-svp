@@ -10,9 +10,7 @@ socket, same as any other mpv instance.
 
 ## Demo
 
-[▶ Watch demo](linux-emby-svp-demo.mp4) — GitHub's README renderer strips
-raw `<video>` tags (only works for its own attachment-upload embeds, not a
-self-hosted repo file), so click through to GitHub's file viewer instead.
+https://github.com/user-attachments/assets/6222570a-da8a-4b34-9192-852fecc8d6fe
 
 ## Prerequisites
 
