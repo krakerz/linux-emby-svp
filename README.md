@@ -1,5 +1,11 @@
 # Emby-Interpolation
 
+⚠️ **This project is no longer maintained.** I've moved the Emby client work
+into [EmbyClientPlus](https://github.com/rie-zel/EmbyClientPlus) instead. This
+repo is kept for reference only and will be archived — no further updates, bug
+fixes, or new features. Feel free to fork it if you want to keep using the
+original Emby client.
+
 Real motion interpolation (24fps -> 120fps) for Emby's Linux desktop client,
 using [SVP4](https://www.svp-team.com/) — same effect SVP gives mpv/MPC-HC
 on Windows. Emby's own "Enable interpolation" is judder correction only.
